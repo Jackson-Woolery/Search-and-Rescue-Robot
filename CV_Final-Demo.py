@@ -84,6 +84,8 @@ USE_CALIB_ANGLE = False
 CALIB_ANGLE_FILE = np.load('CV_ZeroAngle.npz')
 CALIB_ANGLE = - CALIB_ANGLE_FILE['zero_angle']
 
+# DISTANCE TO THE RIGHT OF MARKER
+R_DIST = 12
 
 # TO DISPLAY STREAM IMAGES (state0)
 DISP_STREAM_UNDETECTED = True
@@ -94,9 +96,6 @@ STREAM_DETECTED_WAITKEY = 1
 DISP_PRECISE_IMG = True
 PRECISE_IMG_WAITKEY = 100
 
-# Get the Aruco dictionary
-arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_7X7_100)
-
 # Measured Aruco marker length in inches
 ##MARKER_LENGTH_IN = 3.8125   # Small marker
 MARKER_LENGTH_IN = 7.75     # Large marker
@@ -106,6 +105,9 @@ MARKER_LENGTH_IN = 7.75     # Large marker
 # MAX WORKING DIMENSIONS
 WIDTH, HEIGHT = 640, 480
 width, height = str(WIDTH), str(HEIGHT)
+
+# Get the Aruco dictionary
+arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_7X7_100)
 
 # Load camera properties matrices from file
 # This file is generated from the camera calibration
@@ -205,8 +207,26 @@ def get_vals(corners, newCamMtx):
     angle_deg = angle_rad * 180 / math.pi
     print("angle: ", round(angle_deg, 2), "degrees;     ",
           round(angle_rad, 2), "radians")
+
+    # distance, angle_rad, angle_deg = get_adj_vals(rvecs, tvecs)
+    get_adj_vals(rvecs, tvecs)
     
     return distance, angle_rad, angle_deg
+
+
+# Gets distance and angle for trajectory to the right of marker
+def get_adj_vals(rvecs, tvecs):
+    # Matrix for destination point with respect to marker
+    p_m = [[R_DIST], [0], [0], [1]]
+
+    tvec = np.array([tvecs]).T
+
+    R = cv.Rodrigues(rvecs)[0]
+
+    H = np.block([[R, tvec], [0, 0, 0, 1]])
+
+    p_c = H @ p_m
+    print("p_c: ", p_c)
 
 
 ####### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
