@@ -218,17 +218,16 @@ def get_vals(corners, newCamMtx):
 # Gets distance and angle for trajectory to the right of marker
 def get_adj_vals(rvecs, tvecs):
     # Matrix for destination point with respect to marker
-    p_m = [[R_DIST], [0], [0], [1]]
-
+    p_m = np.array([[R_DIST], [0], [0], [1]])
+    # Reorganize tvec for block function
     tvec = np.array([tvecs]).T
     print("tvec: ", tvec)
-
+    # Get rotation matrix
     R = cv.Rodrigues(rvecs)[0]
-    print("R: ", R)
-    print("R[0][0]: ", R[0][0])
-
-##    H = np.block([[R, tvec], [0, 0, 0, 1]])
-##    H = [[R
+##    print("R: ", R)
+    
+    # Create homography matrix
+##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
     H = np.zeros((4, 4))
     for i in range(3):
         for j in range(3):
@@ -238,19 +237,19 @@ def get_adj_vals(rvecs, tvecs):
     H[3][3] = 1
     for k in range(3):
         H[k][3] = tvec[k]
+##    print("H: ", H)
 
-    print("H: ", H)
-    
-    p_c = H @ p_m
+    # Get destination point with respect to camera
+    p_c = np.array(H @ p_m)
     print("p_c: ", p_c)
-
+    # Calculate distance to destination point
     distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
     print("transform dist: ", round(distance, 2), "inches")
-
+    # Calculate angle to destination point
     angle_rad = np.arctan(p_c[0] / p_c[1])
     angle_rad = - angle_rad
     angle_deg = angle_rad * 180 / math.pi
-    print("transform angle: ", round(angle_deg, 2), "degrees")
+    print("transform angle: ", np.round(angle_deg, 2)[0], "degrees")
 
     return distance, angle_rad, angle_deg
 
@@ -370,7 +369,7 @@ if __name__ == '__main__':
     while True:
         ### GET 'state' FROM ARDUINO ###
         print("Reading state from Arduino")
-##        state = readNumber()
+        state = readNumber()
 
         # State0: Rotate robot and search continuously for marker
         if state == 0:
@@ -402,8 +401,8 @@ if __name__ == '__main__':
                     writeBlock(dataToArduino)
                     
                     # Send Pi into holding state
-##                    state = 10
-                    state = state_send
+                    state = 10
+##                    state = state_send
                     break
 
                 # Get FPS info
@@ -425,7 +424,7 @@ if __name__ == '__main__':
             
             #### SENDS DISTANCE AND ANGLE TO ARDUINO ####
             print("Sending angle and distance")
-            dataToArduino[1] = int(round(angle_deg + 31))
+            dataToArduino[1] = int(np.round(angle_deg + 31)[0])
             dataToArduino[2] = int(round(distance))
             writeBlock(dataToArduino)       
             
