@@ -81,8 +81,8 @@ address = 0x04
 # FOR ZERO ANGLE CALIBRATION
 USE_CALIB_ANGLE = False
 
-CALIB_ANGLE_FILE = np.load('CV_ZeroAngle.npz')
-CALIB_ANGLE = - CALIB_ANGLE_FILE['zero_angle']
+##CALIB_ANGLE_FILE = np.load('CV_ZeroAngle.npz')
+##CALIB_ANGLE = - CALIB_ANGLE_FILE['zero_angle']
 
 # DISTANCE TO THE RIGHT OF MARKER
 R_DIST = 12
@@ -97,8 +97,9 @@ DISP_PRECISE_IMG = True
 PRECISE_IMG_WAITKEY = 100
 
 # Measured Aruco marker length in inches
-##MARKER_LENGTH_IN = 3.8125   # Small marker
-MARKER_LENGTH_IN = 7.75     # Large marker
+MARKER_LENGTH_IN = 50 / 25.4    # Tiny test marker
+##MARKER_LENGTH_IN = 3.8125       # Small marker
+##MARKER_LENGTH_IN = 7.75         # Large marker
 
 # Image capture dimensions
 # Max res: 3280 x 2464
@@ -107,7 +108,7 @@ WIDTH, HEIGHT = 640, 480
 width, height = str(WIDTH), str(HEIGHT)
 
 # Get the Aruco dictionary
-arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_7X7_100)
+arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_100)
 
 # Load camera properties matrices from file
 # This file is generated from the camera calibration
@@ -209,9 +210,9 @@ def get_vals(corners, newCamMtx):
           round(angle_rad, 2), "radians")
 
     # distance, angle_rad, angle_deg = get_adj_vals(rvecs, tvecs)
-    get_adj_vals(rvecs, tvecs)
+    adj_dist, adj_angle_rad, adj_angle_deg = get_adj_vals(rvecs, tvecs)
     
-    return distance, angle_rad, angle_deg
+    return adj_dist, adj_angle_rad, adj_angle_deg
 
 
 # Gets distance and angle for trajectory to the right of marker
@@ -220,13 +221,38 @@ def get_adj_vals(rvecs, tvecs):
     p_m = [[R_DIST], [0], [0], [1]]
 
     tvec = np.array([tvecs]).T
+    print("tvec: ", tvec)
 
     R = cv.Rodrigues(rvecs)[0]
+    print("R: ", R)
+    print("R[0][0]: ", R[0][0])
 
-    H = np.block([[R, tvec], [0, 0, 0, 1]])
+##    H = np.block([[R, tvec], [0, 0, 0, 1]])
+##    H = [[R
+    H = np.zeros((4, 4))
+    for i in range(3):
+        for j in range(3):
+            H[i][j] = R[i][j]
+            if i == 3:
+                H[i][j] = 0
+    H[3][3] = 1
+    for k in range(3):
+        H[k][3] = tvec[k]
 
+    print("H: ", H)
+    
     p_c = H @ p_m
     print("p_c: ", p_c)
+
+    distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
+    print("transform dist: ", round(distance, 2), "inches")
+
+    angle_rad = np.arctan(p_c[0] / p_c[1])
+    angle_rad = - angle_rad
+    angle_deg = angle_rad * 180 / math.pi
+    print("transform angle: ", round(angle_deg, 2), "degrees")
+
+    return distance, angle_rad, angle_deg
 
 
 ####### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
@@ -344,7 +370,7 @@ if __name__ == '__main__':
     while True:
         ### GET 'state' FROM ARDUINO ###
         print("Reading state from Arduino")
-        state = readNumber()
+##        state = readNumber()
 
         # State0: Rotate robot and search continuously for marker
         if state == 0:
@@ -376,7 +402,8 @@ if __name__ == '__main__':
                     writeBlock(dataToArduino)
                     
                     # Send Pi into holding state
-                    state = 10
+##                    state = 10
+                    state = state_send
                     break
 
                 # Get FPS info
