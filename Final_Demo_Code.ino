@@ -11,8 +11,8 @@
   2: Arduino turns to face just to the side of the marker, using a PI control system
   3: Stops motors, determines distance needed to drive to the marker
   4: Robot drives to just to the side of the marker using a PI control system.
-  6: Robot spins in circle around marker (hard-coded).  If detected(pistate= 1) new marker and countermarker <= number_of_markers then back to state 1 all control system resets. 
-  7: Robot stops motors. 
+  5: Robot spins in circle around marker (hard-coded).  If detected(pistate= 1) new marker and countermarker <= number_of_markers then back to state 1 all control system resets. 
+  6: Robot stops motors. 
 */
 
 
