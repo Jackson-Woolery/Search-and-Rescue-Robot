@@ -171,8 +171,7 @@ void loop() {
           delay(500);
           motorSpeedL = 0;
           motorSpeedR = 0; // Stops motors
-          state = 1;
-          marker_counter = marker_counter + 1; 
+          state = 1; 
           // send state value to Pi in order to get precise image 
         }
         break;
@@ -195,7 +194,7 @@ void loop() {
              fudge = (float) 0.1;
           }
         }  
-
+        marker_counter = marker_counter + 1;
         break;
         
     case 2:          
