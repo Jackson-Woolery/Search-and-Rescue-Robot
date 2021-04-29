@@ -97,9 +97,9 @@ DISP_PRECISE_IMG = True
 PRECISE_IMG_WAITKEY = 100
 
 # Measured Aruco marker length in inches
-MARKER_LENGTH_IN = 50 / 25.4    # Tiny test marker
+##MARKER_LENGTH_IN = 50 / 25.4    # Tiny test marker
 ##MARKER_LENGTH_IN = 3.8125       # Small marker
-##MARKER_LENGTH_IN = 7.75         # Large marker
+MARKER_LENGTH_IN = 7.75         # Large marker
 
 # Image capture dimensions
 # Max res: 3280 x 2464
@@ -108,7 +108,7 @@ WIDTH, HEIGHT = 640, 480
 width, height = str(WIDTH), str(HEIGHT)
 
 # Get the Aruco dictionary
-arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_100)
+arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_7X7_100)
 
 # Load camera properties matrices from file
 # This file is generated from the camera calibration
@@ -128,7 +128,7 @@ def get_timing(start_time):
 
 
 # Detects marker and precise corners
-def detect_marker(img):
+def detect_marker(img, id_num):
     # Get new camera matrix
     newCamMtx, roi = cv.getOptimalNewCameraMatrix(cameraMatrix=K,
                                                   distCoeffs=DIST_COEFFS,
@@ -148,29 +148,31 @@ def detect_marker(img):
 
     # If marker detected...
     if ids is not None:
-        # Perform subpixel corner detection
-        gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
+        for tag in ids:
+            if tag == id_num:
+                # Perform subpixel corner detection
+                gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
 
-        criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
-                    100,
-                    0.0001
-                    )
-        for corner in corners:
-            cv.cornerSubPix(image=gray_img,
-                            corners=corner,
-                            winSize=(2,2),
-                            zeroZone=(-1,-1),
-                            criteria=criteria
+                criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+                            100,
+                            0.0001
                             )
-        # Frame detected marker
-        img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
+                for corner in corners:
+                    cv.cornerSubPix(image=gray_img,
+                                    corners=corner,
+                                    winSize=(2,2),
+                                    zeroZone=(-1,-1),
+                                    criteria=criteria
+                                    )
+                # Frame detected marker
+                img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
 
         # Get distance and angle to marker
         distance, angle_rad, angle_deg = get_vals(corners, newCamMtx)
 
     # If marker not detected...
     if ids is None:
-        print("Marker not detected")
+        print("Marker not detected - State 1")
 ##        lcd.clear()
 ##        lcd.message = "Marker not detected"
         
@@ -203,8 +205,8 @@ def get_vals(corners, newCamMtx):
     # Calculate angle using trigonometry with distance values
     angle_rad = np.arctan(t_vec[0] / t_vec[2])
     angle_rad = - angle_rad
-    if USE_CALIB_ANGLE is True:
-        angle_rad = angle_rad + CALIB_ANGLE
+    # if USE_CALIB_ANGLE is True:
+    #     angle_rad = angle_rad + CALIB_ANGLE
     angle_deg = angle_rad * 180 / math.pi
     print("angle: ", round(angle_deg, 2), "degrees;     ",
           round(angle_rad, 2), "radians")
@@ -288,7 +290,7 @@ def readNumber():
         return 0
 
 
-def state0(state, img):
+def state0(state, img, id_num):
     print("Running State 0")
                 
     # Detect if Aruco marker is present
@@ -308,9 +310,13 @@ def state0(state, img):
 
     # If marker detected...
     if ids is not None:
-        print("----------BEACON DETECTED----------")
-        # Change to next state
-        state = 1
+        for tag in ids:
+                if tag == id_num:
+                    print("----------BEACON ", id_num, " DETECTED----------")
+                    # Change to next state
+                    state = 1
+                else:
+                    print("Incorrect beacon order detected: ", tag)
 
         # Optional stream detected display
         if DISP_STREAM_DETECTED is True:
@@ -332,7 +338,7 @@ def state0(state, img):
     return state
 
 
-def state1():
+def state1(id_num):
     print("Running State 1")
 
     # Set up picamera array
@@ -342,7 +348,7 @@ def state1():
         img = stream.array
                 
         # Detect Aruco marker, and get detected angle and distance
-        distance, angle_deg, angle_rad, img = detect_marker(img)
+        distance, angle_deg, angle_rad, img = detect_marker(img, id_num)
 
         # Optional display stream images
         if DISP_PRECISE_IMG is True:
@@ -359,6 +365,7 @@ def state1():
 if __name__ == '__main__':
     # Initialize state
     state = 0
+    id_num = 0
     start = time()
     fps_arr = []
 
@@ -372,7 +379,7 @@ if __name__ == '__main__':
         state = readNumber()
 
         # State0: Rotate robot and search continuously for marker
-        if state == 0:
+        if state == 0 or state == 5:
             # Set up capture array for PiCamera
             # Use sports mode to reduce blur in state0 while turning
             camera.exposure_mode = 'sports'
@@ -391,7 +398,7 @@ if __name__ == '__main__':
 
                 # Run state0 function on captured frame
                 img = frame.array
-                state_send = state0(state, img)
+                state_send = state0(state, img, id_num)
 
                 rawCapture.truncate(0)
 
@@ -420,7 +427,8 @@ if __name__ == '__main__':
         # State 1: Robot has stopped; capture still photo, send dist & angle
         if state == 1:
             camera.exposure_mode = 'auto'
-            distance, angle_deg, angle_rad = state1()
+            distance, angle_deg, angle_rad = state1(id_num)
+            id_num = id_num + 1
             
             #### SENDS DISTANCE AND ANGLE TO ARDUINO ####
             print("Sending angle and distance")
@@ -432,9 +440,10 @@ if __name__ == '__main__':
             break
 
         # Final state
-        if state == 5: # FINALSTATE?
+        if state == 6:
             cv.destroyAllWindows()
 
         # Holding state for RPi
         if state == 10:
+
             print("Waiting to hear from Arduino")
