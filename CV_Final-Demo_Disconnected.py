@@ -62,21 +62,21 @@ import smbus
 import busio
 import board
 
-# I2C INITIALIZATION
-bus = smbus.SMBus(1)
-i2c = busio.I2C(board.SCL, board.SDA)
-
-# INITIALIZATION OF ARRAY TO SEND TO ARDUINO
-dataToArduino = [0, 180, 0]
-
-# LCD INITIALIZATION
-#lcd_columns = 16
-#lcd_rows = 2
-#lcd = character_lcd.Character_LCD_RGB_I2C(i2c, lcd_columns, lcd_rows)
-#lcd.clear()
-#lcd.color = [100, 0, 100]
-
-address = 0x04
+### I2C INITIALIZATION
+##bus = smbus.SMBus(1)
+##i2c = busio.I2C(board.SCL, board.SDA)
+##
+### INITIALIZATION OF ARRAY TO SEND TO ARDUINO
+##dataToArduino = [0, 180, 0]
+##
+### LCD INITIALIZATION
+###lcd_columns = 16
+###lcd_rows = 2
+###lcd = character_lcd.Character_LCD_RGB_I2C(i2c, lcd_columns, lcd_rows)
+###lcd.clear()
+###lcd.color = [100, 0, 100]
+##
+##address = 0x04
 
 # FOR ZERO ANGLE CALIBRATION
 USE_CALIB_ANGLE = False
@@ -118,38 +118,38 @@ K = KD['k']
 DIST_COEFFS = KD['dist']
 
 
-####### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
-def writeBlock(block):
-    try:
-        bus.write_i2c_block_data(address, 1, block)
-        #lcd.message = "Sent: " + userString + "\
-    except:
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
-
-
-####### FUNCTION FOR WRITING A NUMBER TO THE ARDUINO #######
-def writeNumber(num):
-    try:
-        bus.write_byte_data(address, 0, num)
-    except:
-        print("I2C Error")
-    return -1
-
-
-####### FUNCTION FOR READING A NUMBER FROM THE ARDUINO #######
-def readNumber():
-    try:
-        number = bus.read_byte(address)
-        return number
-    except:
-        print("I2C Error")
-        return 0
+######### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
+##def writeBlock(block):
+##    try:
+##        bus.write_i2c_block_data(address, 1, block)
+##        #lcd.message = "Sent: " + userString + "\
+##    except:
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##        print("%%%%%%%%%%I2C Error%%%%%%%%%%%")
+##
+##
+######### FUNCTION FOR WRITING A NUMBER TO THE ARDUINO #######
+##def writeNumber(num):
+##    try:
+##        bus.write_byte_data(address, 0, num)
+##    except:
+##        print("I2C Error")
+##    return -1
+##
+##
+######### FUNCTION FOR READING A NUMBER FROM THE ARDUINO #######
+##def readNumber():
+##    try:
+##        number = bus.read_byte(address)
+##        return number
+##    except:
+##        print("I2C Error")
+##        return 0
 
 
 
@@ -173,16 +173,19 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
         distCoeffs = 0
         )
 
+    print("tvecs: ", tvecs)
     # Unpack translation vector
     # This vector contains x, y, z distances of tag from camera
-    tvec = tvecs[mark_inc][0]
+    t_vec = tvecs[mark_inc][0]
+    print("t_vec: ", t_vec)
 
     # Calculate distance using the root of the sum of the squares
-    distance = math.sqrt(tvec[0] ** 2 + tvec[2] ** 2)
+    distance = math.sqrt(t_vec[0] ** 2 + t_vec[2] ** 2)
     print("distance: ", round(distance, 2), "inches")
 
+    
     # Calculate angle using trigonometry with distance values
-    angle_rad = np.arctan(tvec[0] / tvec[2])
+    angle_rad = np.arctan(t_vec[0] / t_vec[2])
     angle_rad = - angle_rad
     # if USE_CALIB_ANGLE is True:
     #     angle_rad = angle_rad + CALIB_ANGLE
@@ -200,24 +203,25 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
 def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     # Matrix for destination point with respect to marker
     p_m = np.array([[R_DIST], [0], [0], [1]])
-    # Reorganize tvecs for block function
+    # Reorganize tvec for block function
+##    tvec = np.array([tvecs]).T
     tvecs = np.array([tvecs]).T
 
-    # If multiple markers are detected...
+
     if mult_marks_det == True:
-        # Save rvec and tvec of single correct marker
         rvec = rvecs[mark_inc]
         tvec = np.zeros((3, 1))
         for t in range(3):
             tvec[t] = tvecs[t][0][mark_inc]
-        
-    # If single correct marker is detected...
+        print("corr tvec: ", tvecs)
+
     if mult_marks_det == False:
         tvec = tvecs
         rvec = rvecs
         
     # Get rotation matrix
-    R = cv.Rodrigues(rvecs)[0]
+    R = cv.Rodrigues(rvec)[0]
+##    print("R: ", R)
     
     # Create homography matrix
 ##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
@@ -229,12 +233,12 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
                 H[i][j] = 0
     H[3][3] = 1
     for k in range(3):
-        H[k][3] = tvecs[k]
+        H[k][3] = tvec[k]
+##    print("H: ", H)
 
     # Get destination point with respect to camera
     p_c = np.array(H @ p_m)
     print("p_c: ", p_c)
-    
     # Calculate distance to destination point
     distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
     print("transform dist: ", round(distance, 2), "inches")
@@ -302,7 +306,8 @@ def state1(id_num, img):
     angle_deg = 180
     angle_rad = math.pi
     distance = 0
-    
+    det_mark_num = 10
+
     # Get new camera matrix
     newCamMtx, roi = cv.getOptimalNewCameraMatrix(cameraMatrix=K,
                                                   distCoeffs=DIST_COEFFS,
@@ -323,13 +328,9 @@ def state1(id_num, img):
     # If marker detected...
     if ids is not None:
         print("Detected IDs: ", ids)
-        # Initialize variables
         inc = 0
         mult_marks_det = False
-        det_mark_num = 10
-
         for tag in ids:
-            # If detected marker is correct order...
             if tag == id_num:
                 det_mark_num = inc
                 # Perform subpixel corner detection
@@ -346,14 +347,14 @@ def state1(id_num, img):
                                     zeroZone=(-1, -1),
                                     criteria=criteria
                                     )
-            # If detected marker is not correct order...
             else:
                 mult_marks_det = True
-            inc = inc + 1
             
+            inc = inc + 1
+
         # Frame detected marker
         img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
-            
+
         # If the correct marker is detected...
         if det_mark_num != 10:
             # Get distance and angle to marker
@@ -392,8 +393,8 @@ if __name__ == '__main__':
                                            ):
         # Start frame timer
         start_time = time()
-        # Get state from Arduino
-        state = readNumber()
+##        # Get state from Arduino
+##        state = readNumber()
         # Get and display stream images
         img = frame.array
         cv.imshow("mainstream", img)
@@ -408,11 +409,12 @@ if __name__ == '__main__':
             # Run State 0 continuous detection on img
             state_send = state0(state, img, id_num)
 
-            ###### SEND STATE 1 TO ARDUINO ######
-            if state_send == 1:
-                print("SENDING STATE 1 TO ARDUINO")
-                dataToArduino[0] = state_send
-                writeBlock(dataToArduino)
+##            ###### SEND STATE 1 TO ARDUINO ######
+##            if state_send == 1:
+##                print("SENDING STATE 1 TO ARDUINO")
+##                dataToArduino[0] = state_send
+##                writeBlock(dataToArduino)
+            state = state_send
     
 
         # State 1: Robot has stopped; capture still photo, send dist & angle
@@ -424,20 +426,21 @@ if __name__ == '__main__':
             if distance != 0:
                 # Increment marker ID
                 id_num = id_num + 1
-                # Proceed to next state
-                state = 2
+##                # Proceed to next state
+##                state = 2
+                state = 0
 
-                ###### SEND DISTANCE AND ANGLE TO ARDUINO ######
-                print("Sending angle and distance")
-                try:
-                    dataToArduino[1] = int(np.round(angle_deg + 31)[0])
-                except:
-                    dataToArduino[1] = int(np.round(angle_deg + 31))
-                dataToArduino[2] = int(round(distance))
-                writeBlock(dataToArduino)
-                ###### SEND STATE 2 TO ARDUINO ######
-                dataToArduino[0] = state
-                writeBlock(dataToArduino)
+##                ###### SEND DISTANCE AND ANGLE TO ARDUINO ######
+##                print("Sending angle and distance")
+##                try:
+##                    dataToArduino[1] = int(np.round(angle_deg + 31)[0])
+##                except:
+##                    dataToArduino[1] = int(np.round(angle_deg + 31))
+##                dataToArduino[2] = int(round(distance))
+##                writeBlock(dataToArduino)
+##                ###### SEND STATE 2 TO ARDUINO ######
+##                dataToArduino[0] = state
+##                writeBlock(dataToArduino)
 
         else:
             print("State ", state)
@@ -445,4 +448,3 @@ if __name__ == '__main__':
         # Final state
         if state == 6:
             cv.destroyAllWindows()
-
