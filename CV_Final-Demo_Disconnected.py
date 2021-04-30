@@ -173,11 +173,9 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
         distCoeffs = 0
         )
 
-    print("tvecs: ", tvecs)
     # Unpack translation vector
     # This vector contains x, y, z distances of tag from camera
     t_vec = tvecs[mark_inc][0]
-    print("t_vec: ", t_vec)
 
     # Calculate distance using the root of the sum of the squares
     distance = math.sqrt(t_vec[0] ** 2 + t_vec[2] ** 2)
@@ -204,7 +202,6 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     # Matrix for destination point with respect to marker
     p_m = np.array([[R_DIST], [0], [0], [1]])
     # Reorganize tvec for block function
-##    tvec = np.array([tvecs]).T
     tvecs = np.array([tvecs]).T
 
 
@@ -213,7 +210,6 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
         tvec = np.zeros((3, 1))
         for t in range(3):
             tvec[t] = tvecs[t][0][mark_inc]
-        print("corr tvec: ", tvecs)
 
     if mult_marks_det == False:
         tvec = tvecs
@@ -221,7 +217,6 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
         
     # Get rotation matrix
     R = cv.Rodrigues(rvec)[0]
-##    print("R: ", R)
     
     # Create homography matrix
 ##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
@@ -234,7 +229,6 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     H[3][3] = 1
     for k in range(3):
         H[k][3] = tvec[k]
-##    print("H: ", H)
 
     # Get destination point with respect to camera
     p_c = np.array(H @ p_m)
