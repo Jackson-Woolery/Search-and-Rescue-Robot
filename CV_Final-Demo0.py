@@ -118,165 +118,6 @@ K = KD['k']
 DIST_COEFFS = KD['dist']
 
 
-# Gets runtime / FPS data
-def get_timing(start_time):
-    runtime = time() - start_time
-    fps = 1 / runtime
-    fps = round(fps, 3)
-    print("FPS: ", fps)
-    print("\n")
-    return fps
-
-
-# Detects marker and precise corners
-def detect_marker(img, id_num):
-    # Get new camera matrix
-    newCamMtx, roi = cv.getOptimalNewCameraMatrix(cameraMatrix=K,
-                                                  distCoeffs=DIST_COEFFS,
-                                                  imageSize=(WIDTH, HEIGHT),
-                                                  alpha=1,
-                                                  newImgSize=(WIDTH, HEIGHT)
-                                                  )                                                  
-    # Create undistorted, corrected image
-    corr_img = cv.undistort(img, K, DIST_COEFFS, None, newCamMtx)
-
-    # Detect Aruco marker corners and IDs
-    corners, ids, _ = cv.aruco.detectMarkers(image=corr_img,
-                                             dictionary=arucoDict,
-                                             cameraMatrix=newCamMtx,
-                                             distCoeff=0
-                                             )
-
-    # If marker detected...
-    if ids is not None:
-        print("ids: ", ids)
-        inc = 0
-        flag = False
-        for tag in ids:
-            if tag == id_num:
-                mark_inc = inc
-                # Perform subpixel corner detection
-                gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
-
-                criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
-                            100,
-                            0.0001
-                            )
-                for corner in corners:
-                    cv.cornerSubPix(image=gray_img,
-                                    corners=corner,
-                                    winSize=(2,2),
-                                    zeroZone=(-1,-1),
-                                    criteria=criteria
-                                    )
-            else:
-                flag = True
-            # Frame detected marker    
-            img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
-            inc = inc + 1
-
-        # Get distance and angle to marker
-        distance, angle_rad, angle_deg = get_vals(corners, newCamMtx, mark_inc, flag)
-
-    # If marker not detected...
-    if ids is None:
-        print("Marker not detected - State 1")
-##        lcd.clear()
-##        lcd.message = "Marker not detected"
-        
-        # Return zeros
-        angle_deg = 180
-        angle_rad = math.pi
-        distance = 0
-
-    return distance, angle_deg, angle_rad, img
-
-
-# Gets distance and angle to Aruco marker
-def get_vals(corners, newCamMtx, mark_inc, flag):
-    # Get rotation and translation vectors with respect to marker
-    rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-        corners,
-        markerLength = MARKER_LENGTH_IN,
-        cameraMatrix = newCamMtx,
-        distCoeffs = 0
-        )
-
-    # Unpack translation vector
-    # This vector contains x, y, z distances of tag from camera
-    t_vec = tvecs[0][0]
-
-    # Calculate distance using the root of the sum of the squares
-    distance = math.sqrt(t_vec[0] ** 2 + t_vec[2] ** 2)
-    print("distance: ", round(distance, 2), "inches")
-
-    # Calculate angle using trigonometry with distance values
-    angle_rad = np.arctan(t_vec[0] / t_vec[2])
-    angle_rad = - angle_rad
-    # if USE_CALIB_ANGLE is True:
-    #     angle_rad = angle_rad + CALIB_ANGLE
-    angle_deg = angle_rad * 180 / math.pi
-    print("angle: ", round(angle_deg, 2), "degrees;     ",
-          round(angle_rad, 2), "radians")
-
-    # distance, angle_rad, angle_deg = get_adj_vals(rvecs, tvecs)
-    adj_dist, adj_angle_rad, adj_angle_deg = get_adj_vals(rvecs, tvecs, mark_inc, flag)
-    
-    return adj_dist, adj_angle_rad, adj_angle_deg
-
-
-# Gets distance and angle for trajectory to the right of marker
-def get_adj_vals(rvecs, tvecs, mark_inc, flag):
-    # Matrix for destination point with respect to marker
-    p_m = np.array([[R_DIST], [0], [0], [1]])
-    # Reorganize tvec for block function
-    tvec = np.array([tvecs]).T
-    print("tvec: ", tvec)
-    print("tvec[1]: ", tvec[1])
-    print("rvec: ", rvecs)
-
-    if flag == True:
-        rvecs = rvecs[mark_inc]
-        tvecs = np.zeros((3, 1))
-        for t in range(3):
-            tvecs[t] = tvec[t][0][mark_inc]
-        print("corr tvec: ", tvecs)
-
-    if flag == False:
-        tvecs = tvec
-        
-    # Get rotation matrix
-    R = cv.Rodrigues(rvecs)[0]
-##    print("R: ", R)
-    
-    # Create homography matrix
-##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
-    H = np.zeros((4, 4))
-    for i in range(3):
-        for j in range(3):
-            H[i][j] = R[i][j]
-            if i == 3:
-                H[i][j] = 0
-    H[3][3] = 1
-    for k in range(3):
-        H[k][3] = tvecs[k]
-##    print("H: ", H)
-
-    # Get destination point with respect to camera
-    p_c = np.array(H @ p_m)
-    print("p_c: ", p_c)
-    # Calculate distance to destination point
-    distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
-    print("transform dist: ", round(distance, 2), "inches")
-    # Calculate angle to destination point
-    angle_rad = np.arctan(p_c[0] / p_c[2])
-    angle_rad = - angle_rad
-    angle_deg = angle_rad * 180 / math.pi
-    print("transform angle: ", np.round(angle_deg, 2)[0], "degrees")
-
-    return distance, angle_rad, angle_deg
-
-
 ####### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
 def writeBlock(block):
     try:
@@ -311,8 +152,105 @@ def readNumber():
         return 0
 
 
+
+# Gets runtime / FPS data
+def get_timing(start_time):
+    runtime = time() - start_time
+    fps = 1 / runtime
+    fps = round(fps, 3)
+    print("FPS: ", fps)
+    print("\n")
+    return fps
+
+
+# Gets distance and angle to Aruco marker
+def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
+    # Get rotation and translation vectors with respect to marker
+    rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
+        corners,
+        markerLength = MARKER_LENGTH_IN,
+        cameraMatrix = newCamMtx,
+        distCoeffs = 0
+        )
+
+    # Unpack translation vector
+    # This vector contains x, y, z distances of tag from camera
+    t_vec = tvecs[0][0]
+
+    # Calculate distance using the root of the sum of the squares
+    distance = math.sqrt(t_vec[0] ** 2 + t_vec[2] ** 2)
+    print("distance: ", round(distance, 2), "inches")
+
+    # Calculate angle using trigonometry with distance values
+    angle_rad = np.arctan(t_vec[0] / t_vec[2])
+    angle_rad = - angle_rad
+    # if USE_CALIB_ANGLE is True:
+    #     angle_rad = angle_rad + CALIB_ANGLE
+    angle_deg = angle_rad * 180 / math.pi
+    print("angle: ", round(angle_deg, 2), "degrees;     ",
+          round(angle_rad, 2), "radians")
+
+    # distance, angle_rad, angle_deg = get_adj_vals(rvecs, tvecs)
+    adj_dist, adj_angle_rad, adj_angle_deg = get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det)
+    
+    return adj_dist, adj_angle_rad, adj_angle_deg
+
+
+# Gets distance and angle for trajectory to the right of marker
+def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
+    # Matrix for destination point with respect to marker
+    p_m = np.array([[R_DIST], [0], [0], [1]])
+    # Reorganize tvec for block function
+    tvec = np.array([tvecs]).T
+    print("tvec: ", tvec)
+    print("tvec[1]: ", tvec[1])
+    print("rvec: ", rvecs)
+
+    if mult_marks_det == True:
+        rvecs = rvecs[mark_inc]
+        tvecs = np.zeros((3, 1))
+        for t in range(3):
+            tvecs[t] = tvec[t][0][mark_inc]
+        print("corr tvec: ", tvecs)
+
+    if mult_marks_det == False:
+        tvecs = tvec
+        
+    # Get rotation matrix
+    R = cv.Rodrigues(rvecs)[0]
+##    print("R: ", R)
+    
+    # Create homography matrix
+##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
+    H = np.zeros((4, 4))
+    for i in range(3):
+        for j in range(3):
+            H[i][j] = R[i][j]
+            if i == 3:
+                H[i][j] = 0
+    H[3][3] = 1
+    for k in range(3):
+        H[k][3] = tvecs[k]
+##    print("H: ", H)
+
+    # Get destination point with respect to camera
+    p_c = np.array(H @ p_m)
+    print("p_c: ", p_c)
+    # Calculate distance to destination point
+    distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
+    print("transform dist: ", round(distance, 2), "inches")
+    # Calculate angle to destination point
+    angle_rad = np.arctan(p_c[0] / p_c[2])
+    angle_rad = - angle_rad
+    angle_deg = angle_rad * 180 / math.pi
+    print("transform angle: ", np.round(angle_deg, 2)[0], "degrees")
+
+    return distance, angle_rad, angle_deg
+
+
 def state0(state, img, id_num):
     print("Running State 0")
+    print("Searching for Aruco ID: ", id_num)
                 
     # Detect if Aruco marker is present
     corners, ids, _ = cv.aruco.detectMarkers(image=img,
@@ -333,11 +271,11 @@ def state0(state, img, id_num):
     if ids is not None:
         for tag in ids:
                 if tag == id_num:
-                    print("----------BEACON ", id_num, " DETECTED----------")
+                    print("----------BEACON ", id_num, " DETECTED STATE 0----------")
                     # Change to next state
                     state = 1
                 else:
-                    print("Incorrect beacon order detected: ", tag)
+                    print("Incorrect beacon detected: ", tag)
 
         # Optional stream detected display
         if DISP_STREAM_DETECTED is True:
@@ -361,8 +299,64 @@ def state0(state, img, id_num):
 
 def state1(id_num, img):
     print("Running State 1")
-    # Detect Aruco marker, and get detected angle and distance
-    distance, angle_deg, angle_rad, img = detect_marker(img, id_num)
+    # Return zeros
+    angle_deg = 180
+    angle_rad = math.pi
+    distance = 0
+    det_mark_num = 10
+
+    # Get new camera matrix
+    newCamMtx, roi = cv.getOptimalNewCameraMatrix(cameraMatrix=K,
+                                                  distCoeffs=DIST_COEFFS,
+                                                  imageSize=(WIDTH, HEIGHT),
+                                                  alpha=1,
+                                                  newImgSize=(WIDTH, HEIGHT)
+                                                  )
+    # Create undistorted, corrected image
+    corr_img = cv.undistort(img, K, DIST_COEFFS, None, newCamMtx)
+
+    # Detect Aruco marker corners and IDs
+    corners, ids, _ = cv.aruco.detectMarkers(image=corr_img,
+                                             dictionary=arucoDict,
+                                             cameraMatrix=newCamMtx,
+                                             distCoeff=0
+                                             )
+
+    # If marker detected...
+    if ids is not None:
+        print("Detected IDs: ", ids)
+        inc = 0
+        mult_marks_det = False
+        for tag in ids:
+            if tag == id_num:
+                det_mark_num = inc
+                # Perform subpixel corner detection
+                gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
+
+                criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+                            100,
+                            0.0001
+                            )
+                for corner in corners:
+                    cv.cornerSubPix(image=gray_img,
+                                    corners=corner,
+                                    winSize=(2, 2),
+                                    zeroZone=(-1, -1),
+                                    criteria=criteria
+                                    )
+            else:
+                mult_marks_det = True
+            # Frame detected marker
+            img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
+            inc = inc + 1
+        # If the correct marker is detected...
+        if det_mark_num != 10:
+            # Get distance and angle to marker
+            distance, angle_rad, angle_deg = get_vals(corners, newCamMtx, det_mark_num, mult_marks_det)
+
+    # If marker not detected...
+    if ids is None:
+        print("Marker not detected - State 1")
 
     # Optional display stream images
     if DISP_PRECISE_IMG is True:
@@ -374,7 +368,7 @@ def state1(id_num, img):
   
             
 if __name__ == '__main__':
-    # Initialize state
+    # Initialize variables
     state = 0
     id_num = 2
     start = time()
@@ -386,14 +380,16 @@ if __name__ == '__main__':
     camera.exposure_mode = 'sports'
     rawCapture = PiRGBArray(camera, size=(WIDTH, HEIGHT))
 
+    # For each frame captured...
     for frame in camera.capture_continuous(rawCapture,
                                            format="bgr",
                                            use_video_port=True
                                            ):
+        # Start frame timer
         start_time = time()
-
+        # Get state from Arduino
         state = readNumber()
-        
+        # Get and display stream images
         img = frame.array
         cv.imshow("mainstream", img)
         cv.waitKey(1)
@@ -404,10 +400,10 @@ if __name__ == '__main__':
             # Default distance and angle
             distance = 0
             angle_deg = 180
-
+            # Run State 0 continuous detection on img
             state_send = state0(state, img, id_num)
 
-            ###### RETURN STATE TO ARDUINO ######
+            ###### SEND STATE 1 TO ARDUINO ######
             if state_send == 1:
                 print("SENDING STATE 1 TO ARDUINO")
                 dataToArduino[0] = state_send
@@ -416,20 +412,27 @@ if __name__ == '__main__':
 
         # State 1: Robot has stopped; capture still photo, send dist & angle
         if state == 1:
-            camera.exposure_mode = 'auto'
+            # Run State 1 precise detection and get distance & angle values
             distance, angle_deg, angle_rad = state1(id_num, img)
-            id_num = id_num + 1
-            state = 10
-            
-            #### SENDS DISTANCE AND ANGLE TO ARDUINO ####
-            print("Sending angle and distance")
-            try:
-                dataToArduino[1] = int(np.round(angle_deg + 31)[0])
-            except:
-                dataToArduino[1] = int(np.round(angle_deg + 31))
 
-            dataToArduino[2] = int(round(distance))
-            writeBlock(dataToArduino)       
+            # If correct beacon is detected...
+            if distance != 0:
+                # Increment marker ID
+                id_num = id_num + 1
+                # Proceed to next state
+                state = 2
+
+                ###### SEND DISTANCE AND ANGLE TO ARDUINO ######
+                print("Sending angle and distance")
+                try:
+                    dataToArduino[1] = int(np.round(angle_deg + 31)[0])
+                except:
+                    dataToArduino[1] = int(np.round(angle_deg + 31))
+                dataToArduino[2] = int(round(distance))
+                writeBlock(dataToArduino)
+                ###### SEND STATE 2 TO ARDUINO ######
+                dataToArduino[0] = state
+                writeBlock(dataToArduino)
 
         else:
             print("State ", state)
@@ -437,10 +440,4 @@ if __name__ == '__main__':
         # Final state
         if state == 6:
             cv.destroyAllWindows()
-
-        # Holding state for RPi
-        if state == 10:
-            print("Waiting to hear from Arduino")
-
-        
 
