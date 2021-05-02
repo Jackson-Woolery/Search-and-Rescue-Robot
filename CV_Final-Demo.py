@@ -172,7 +172,7 @@ def get_timing(start_time):
 
 
 # Gets distance and angle to Aruco marker
-def get_vals(corners, newCamMtx, mark_inc, mult_marks_det, ids, img):
+def get_vals(corners, newCamMtx, mult_marks_det, ids, img):
     # Get rotation and translation vectors with respect to marker
     rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
         corners,
@@ -181,14 +181,23 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det, ids, img):
         distCoeffs = 0
         )
 
-    
+    d_array = []
     # Unpack translation vector
     # This vector contains x, y, z distances of tag from camera
-    tvec = tvecs[mark_inc][0]
+    inc = 0
+    print("tvecs: ", tvecs)
+    for tag in ids:
+        tvec = tvecs[inc][0]
+        print("tvec: ", tvec)
+        # Calculate distance using the root of the sum of the squares
+        distance = math.sqrt(tvec[0] ** 2 + tvec[2] ** 2)
+        print("distance: ", round(distance, 2), "inches")
+        d_array.append(distance)
+        inc = inc + 1
 
-    # Calculate distance using the root of the sum of the squares
-    distance = math.sqrt(tvec[0] ** 2 + tvec[2] ** 2)
-    print("distance: ", round(distance, 2), "inches")
+    mark_inc = d_array.index(min(d_array))
+    next_id = ids[mark_inc]
+    print("Next ID: ", next_id)
 
     # Calculate angle using trigonometry with distance values
     angle_rad = np.arctan(tvec[0] / tvec[2])
@@ -266,9 +275,8 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det, img):
     return dist_send, angle_rad, angle_send, img
 
 
-def state0(state, img, id_num):
+def state0(state, img):
     print("Running State 0")
-    print("Searching for Aruco ID: ", id_num)
                 
     # Detect if Aruco marker is present
     corners, ids, _ = cv.aruco.detectMarkers(image=img,
@@ -288,12 +296,9 @@ def state0(state, img, id_num):
     # If marker detected...
     if ids is not None:
         for tag in ids:
-                if tag == id_num:
-                    print("----------BEACON ", id_num, " DETECTED STATE 0----------")
-                    # Change to next state
-                    state = 1
-                else:
-                    print("Incorrect beacon detected: ", tag)
+            print("----------BEACON DETECTED STATE 0----------")
+            # Change to next state
+            state = 1
 
         # Optional stream detected display
         if DISP_STREAM_DETECTED is True:
@@ -315,7 +320,7 @@ def state0(state, img, id_num):
     return state
 
 
-def state1(id_num, img):
+def state1(img):
     print("Running State 1")
     # Return zeros
     angle_deg = 180
@@ -343,50 +348,44 @@ def state1(id_num, img):
     if ids is not None:
         print("Detected IDs: ", ids)
         # Initialize variables
-        inc = 0
         mult_marks_det = False
-        det_mark_num = 10
+        count = 0
 
         for tag in ids:
-            # If detected marker is correct order...
-            if tag == id_num:
-                det_mark_num = inc
-                # Perform subpixel corner detection
-                gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
+            # Perform subpixel corner detection
+            gray_img = cv.cvtColor(corr_img, cv.COLOR_BGR2GRAY)
 
-                criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
-                            100,
-                            0.0001
-                            )
-                for corner in corners:
-                    cv.cornerSubPix(image=gray_img,
-                                    corners=corner,
-                                    winSize=(2, 2),
-                                    zeroZone=(-1, -1),
-                                    criteria=criteria
-                                    )
-            # If detected marker is not correct order...
-            else:
+            criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER,
+                        100,
+                        0.0001
+                        )
+            for corner in corners:
+                cv.cornerSubPix(image=gray_img,
+                                corners=corner,
+                                winSize=(2, 2),
+                                zeroZone=(-1, -1),
+                                criteria=criteria
+                                )
+            if count > 0:
                 mult_marks_det = True
-            inc = inc + 1
+            count = count + 1
             
-        # Frame detected marker
+            
+        # Frame detected markers
         img = cv.aruco.drawDetectedMarkers(corr_img, corners, ids)
             
-        # If the correct marker is detected...
-        if det_mark_num != 10:
-            # Get distance and angle to marker
-            distance, angle_rad, angle_deg, img = get_vals(corners,
-                                                      newCamMtx,
-                                                      det_mark_num,
-                                                      mult_marks_det,
-                                                      ids,
-                                                      img
-                                                      )
-            str_dist = str(distance)
-            str_ang = str(angle_deg)
-            cv.putText(img, "Dist: "+str_dist, (5, 25), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
-            cv.putText(img, "Angle: "+str_ang, (5, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
+
+        # Get distance and angle to marker
+        distance, angle_rad, angle_deg, img = get_vals(corners,
+                                                       newCamMtx,
+                                                       mult_marks_det,
+                                                       ids,
+                                                       img
+                                                       )
+        str_dist = str(distance)
+        str_ang = str(angle_deg)
+        cv.putText(img, "Dist: "+str_dist, (5, 25), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
+        cv.putText(img, "Angle: "+str_ang, (5, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
 
     # If marker not detected...
     if ids is None:
@@ -404,9 +403,9 @@ def state1(id_num, img):
 if __name__ == '__main__':
     # Initialize variables
     state = 0
-    id_num = 0
     start = time()
     fps_arr = []
+    mark_num = 0
 
     # Initialize camera
     camera = PiCamera()
@@ -425,10 +424,10 @@ if __name__ == '__main__':
         state = readNumber()
         # Get and display stream images
         img = frame.array
-        str_id = str(id_num)
         str_state = str(state)
-        cv.putText(img, "ID Stage: "+str_id, (5, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)
-        cv.putText(img, "State: "+str_state, (500, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)
+        str_mark = str(mark_num)
+        cv.putText(img, "Marker Stage: "+str_state, (5, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)        
+        cv.putText(img, "State: "+str_mark, (500, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)
         cv.imshow("Main Stream", img)
         cv.waitKey(1)
         rawCapture.truncate(0)
@@ -439,7 +438,7 @@ if __name__ == '__main__':
             distance = 0
             angle_deg = 180
             # Run State 0 continuous detection on img
-            state_send = state0(state, img, id_num)
+            state_send = state0(state, img)
 
             ###### SEND STATE 1 TO ARDUINO ######
             if state_send == 1:
@@ -453,14 +452,12 @@ if __name__ == '__main__':
         # State 1: Robot has stopped; capture still photo, send dist & angle
         if state == 1:
             # Run State 1 precise detection and get distance & angle values
-            dist_send, angle_send, angle_rad = state1(id_num, img)
+            dist_send, angle_send, angle_rad = state1(img)
 
             # If correct beacon is detected...
             if dist_send != 0:
                 # Increment marker ID
-                id_num = id_num + 1
-                if id_num == 6:
-                    id_num = 7
+                mark_num = mark_num + 1
                 # Proceed to next state
                 state = 2
 
