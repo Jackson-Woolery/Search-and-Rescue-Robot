@@ -429,6 +429,8 @@ if __name__ == '__main__':
                 print("SENDING STATE 1 TO ARDUINO")
                 dataToArduino[0] = state_send
                 writeBlock(dataToArduino)
+                state_send = 0
+                
     
 
         # State 1: Robot has stopped; capture still photo, send dist & angle
