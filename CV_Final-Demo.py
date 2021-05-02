@@ -70,11 +70,12 @@ i2c = busio.I2C(board.SCL, board.SDA)
 dataToArduino = [0, 180, 0]
 
 # LCD INITIALIZATION
-#lcd_columns = 16
-#lcd_rows = 2
-#lcd = character_lcd.Character_LCD_RGB_I2C(i2c, lcd_columns, lcd_rows)
-#lcd.clear()
-#lcd.color = [100, 0, 100]
+##lcd_columns = 16
+##lcd_rows = 2
+##lcd = character_lcd.Character_LCD_RGB_I2C(i2c, lcd_columns, lcd_rows)
+##lcd.clear()
+##lcd.color = [100, 0, 100]
+##lcd.message("DiNgUS")
 
 address = 0x04
 
@@ -100,7 +101,8 @@ PRECISE_IMG_WAITKEY = 100
 ##MARKER_LENGTH_IN = 50 / 25.4    # Tiny test marker
 ##MARKER_LENGTH_IN = 3.8125       # Small marker
 ##MARKER_LENGTH_IN = 7.75         # Large marker
-MARKER_LENGTH_IN = 185 / 25.4  # Final-Demo marker
+##MARKER_LENGTH_IN = 185 / 25.4   # Demo-2 Markers
+MARKER_LENGTH_IN = 90 / 25.4    # "100mm Marker"
 
 # Image capture dimensions
 # Max res: 3280 x 2464
@@ -170,7 +172,7 @@ def get_timing(start_time):
 
 
 # Gets distance and angle to Aruco marker
-def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
+def get_vals(corners, newCamMtx, mark_inc, mult_marks_det, ids, img):
     # Get rotation and translation vectors with respect to marker
     rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
         corners,
@@ -179,6 +181,7 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
         distCoeffs = 0
         )
 
+    
     # Unpack translation vector
     # This vector contains x, y, z distances of tag from camera
     tvec = tvecs[mark_inc][0]
@@ -197,13 +200,13 @@ def get_vals(corners, newCamMtx, mark_inc, mult_marks_det):
           round(angle_rad, 2), "radians")
 
     # distance, angle_rad, angle_deg = get_adj_vals(rvecs, tvecs)
-    adj_dist, adj_angle_rad, adj_angle_deg = get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det)
+    adj_dist, adj_angle_rad, adj_angle_deg, img = get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det, img)
     
-    return adj_dist, adj_angle_rad, adj_angle_deg
+    return adj_dist, adj_angle_rad, adj_angle_deg, img
 
 
 # Gets distance and angle for trajectory to the right of marker
-def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
+def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det, img):
     # Matrix for destination point with respect to marker
     p_m = np.array([[R_DIST], [0], [0], [1]])
     # Reorganize tvecs for block function
@@ -240,6 +243,14 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     # Get destination point with respect to camera
     p_c = np.array(H @ p_m)
     print("p_c: ", p_c)
+
+    Mext = H[0:3, :]
+    p_v = K @ Mext @ p_c
+    print("p_v: ", p_v)
+    print("p_v[0]: ", p_v[0])
+    cv.drawMarker(img, (int(p_v[1][0]), int(p_v[0][0])), (0, 0, 255), cv.MARKER_CROSS, 20, 1, 8)
+
+
     
     # Calculate distance to destination point
     distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
@@ -252,7 +263,7 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     angle_send = int(np.round(angle_deg)[0])
     print("transform angle: ", angle_send, "degrees")
 
-    return dist_send, angle_rad, angle_send
+    return dist_send, angle_rad, angle_send, img
 
 
 def state0(state, img, id_num):
@@ -365,7 +376,13 @@ def state1(id_num, img):
         # If the correct marker is detected...
         if det_mark_num != 10:
             # Get distance and angle to marker
-            distance, angle_rad, angle_deg = get_vals(corners, newCamMtx, det_mark_num, mult_marks_det)
+            distance, angle_rad, angle_deg, img = get_vals(corners,
+                                                      newCamMtx,
+                                                      det_mark_num,
+                                                      mult_marks_det,
+                                                      ids,
+                                                      img
+                                                      )
             str_dist = str(distance)
             str_ang = str(angle_deg)
             cv.putText(img, "Dist: "+str_dist, (5, 25), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
@@ -442,6 +459,8 @@ if __name__ == '__main__':
             if dist_send != 0:
                 # Increment marker ID
                 id_num = id_num + 1
+                if id_num == 6:
+                    id_num = 7
                 # Proceed to next state
                 state = 2
 
@@ -468,4 +487,5 @@ if __name__ == '__main__':
         # Final state
         if state == 6:
             cv.destroyAllWindows()
+            break
 
