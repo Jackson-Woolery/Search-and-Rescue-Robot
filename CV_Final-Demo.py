@@ -88,7 +88,7 @@ USE_CALIB_ANGLE = False
 R_DIST = 8
 
 # TO DISPLAY STREAM IMAGES (state0)
-DISP_STREAM_UNDETECTED = True
+DISP_STREAM_UNDETECTED = False
 STREAM_UNDETECTED_WAITKEY = 1
 DISP_STREAM_DETECTED = True
 STREAM_DETECTED_WAITKEY = 1
@@ -116,6 +116,12 @@ arucoDict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_7X7_100)
 KD = np.load('CV_CameraCalibrationData.npz')
 K = KD['k']
 DIST_COEFFS = KD['dist']
+
+# Text settings
+FONT = cv.FONT_HERSHEY_SIMPLEX
+FONTSCALE = 1
+THICKNESS = 2
+LINETYPE = cv.LINE_AA
 
 
 ####### FUNCTION FOR WRITING ARRAY TO ARDUINO #######
@@ -217,7 +223,7 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
         rvec = rvecs
         
     # Get rotation matrix
-    R = cv.Rodrigues(rvecs)[0]
+    R = cv.Rodrigues(rvec)[0]
     
     # Create homography matrix
 ##    H = np.block([[R, tvec], [0, 0, 0, 1]]) # Does not work with version
@@ -229,7 +235,7 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
                 H[i][j] = 0
     H[3][3] = 1
     for k in range(3):
-        H[k][3] = tvecs[k]
+        H[k][3] = tvec[k]
 
     # Get destination point with respect to camera
     p_c = np.array(H @ p_m)
@@ -237,14 +243,16 @@ def get_adj_vals(rvecs, tvecs, mark_inc, mult_marks_det):
     
     # Calculate distance to destination point
     distance = math.sqrt(p_c[0] ** 2 + p_c[2] ** 2)
-    print("transform dist: ", round(distance, 2), "inches")
+    dist_send = int(round(distance))
+    print("transform dist: ", dist_send, "inches")
     # Calculate angle to destination point
     angle_rad = np.arctan(p_c[0] / p_c[2])
     angle_rad = - angle_rad
     angle_deg = angle_rad * 180 / math.pi
-    print("transform angle: ", np.round(angle_deg, 2)[0], "degrees")
+    angle_send = int(np.round(angle_deg)[0])
+    print("transform angle: ", angle_send, "degrees")
 
-    return distance, angle_rad, angle_deg
+    return dist_send, angle_rad, angle_send
 
 
 def state0(state, img, id_num):
@@ -358,6 +366,10 @@ def state1(id_num, img):
         if det_mark_num != 10:
             # Get distance and angle to marker
             distance, angle_rad, angle_deg = get_vals(corners, newCamMtx, det_mark_num, mult_marks_det)
+            str_dist = str(distance)
+            str_ang = str(angle_deg)
+            cv.putText(img, "Dist: "+str_dist, (5, 25), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
+            cv.putText(img, "Angle: "+str_ang, (5, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv.LINE_AA)
 
     # If marker not detected...
     if ids is None:
@@ -396,7 +408,11 @@ if __name__ == '__main__':
         state = readNumber()
         # Get and display stream images
         img = frame.array
-        cv.imshow("mainstream", img)
+        str_id = str(id_num)
+        str_state = str(state)
+        cv.putText(img, "ID Stage: "+str_id, (5, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)
+        cv.putText(img, "State: "+str_state, (500, 475), FONT, FONTSCALE, (0, 0, 0), THICKNESS, LINETYPE)
+        cv.imshow("Main Stream", img)
         cv.waitKey(1)
         rawCapture.truncate(0)
 
@@ -418,10 +434,10 @@ if __name__ == '__main__':
         # State 1: Robot has stopped; capture still photo, send dist & angle
         if state == 1:
             # Run State 1 precise detection and get distance & angle values
-            distance, angle_deg, angle_rad = state1(id_num, img)
+            dist_send, angle_send, angle_rad = state1(id_num, img)
 
             # If correct beacon is detected...
-            if distance != 0:
+            if dist_send != 0:
                 # Increment marker ID
                 id_num = id_num + 1
                 # Proceed to next state
@@ -429,12 +445,17 @@ if __name__ == '__main__':
 
                 ###### SEND DISTANCE AND ANGLE TO ARDUINO ######
                 print("Sending angle and distance")
-                try:
-                    dataToArduino[1] = int(np.round(angle_deg + 31)[0])
-                except:
-                    dataToArduino[1] = int(np.round(angle_deg + 31))
-                dataToArduino[2] = int(round(distance))
-                writeBlock(dataToArduino)
+##                try:
+##                    print("int(np.round(angle_deg + 31)[0]: ", int(np.round(angle_deg + 31)[0]))
+##                    angle_send = int(np.round(angle_deg + 31)[0])
+##                except:
+##                    print("int(np.round(angle_deg + 31)): ", int(np.round(angle_deg + 31)))
+##                    angle_send = int(np.round(angle_deg + 31))
+            
+                dataToArduino[1] = angle_send + 31
+##                dist_send = int(round(distance))
+                dataToArduino[2] = dist_send
+##                writeBlock(dataToArduino)
                 ###### SEND STATE 2 TO ARDUINO ######
                 dataToArduino[0] = state
                 writeBlock(dataToArduino)
